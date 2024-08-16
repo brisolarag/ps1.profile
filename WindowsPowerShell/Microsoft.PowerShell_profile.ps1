@@ -1,92 +1,22 @@
-### PowerShell Profile Refactor
-### Version 1.03 - Refactored
+oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/darkblood.omp.json" | Invoke-Expression
 
-#################################################################################################################################
-############                                                                                                         ############
-############                                          !!!   WARNING:   !!!                                           ############
-############                                                                                                         ############
-############                DO NOT MODIFY THIS FILE. THIS FILE IS HASHED AND UPDATED AUTOMATICALLY.                  ############
-############                    ANY CHANGES MADE TO THIS FILE WILL BE OVERWRITTEN BY COMMITS TO                      ############
-############                       https://github.com/ChrisTitusTech/powershell-profile.git.                         ############
-############                                                                                                         ############
-#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!#
-############                                                                                                         ############
-############                      IF YOU WANT TO MAKE CHANGES, USE THE Edit-Profile FUNCTION                         ############
-############                              AND SAVE YOUR CHANGES IN THE FILE CREATED.                                 ############
-############                                                                                                         ############
-#################################################################################################################################
 
-#opt-out of telemetry before doing anything, only if PowerShell is run as admin
-if ([bool]([System.Security.Principal.WindowsIdentity]::GetCurrent()).IsSystem) {
-    [System.Environment]::SetEnvironmentVariable('POWERSHELL_TELEMETRY_OPTOUT', 'true', [System.EnvironmentVariableTarget]::Machine)
-}
 
-function Test-ConnectionWithTimeout {
-    param (
-        [string]$hostname,
-        [int]$timeoutMs = 1000
-    )
-
-    try {
-        $ping = New-Object System.Net.NetworkInformation.Ping
-        $pingResult = $ping.Send($hostname, $timeoutMs)
-        return $pingResult.Status -eq "Success"
-    } catch {
-        return $false
-    }
-}
-
-# Initial GitHub.com connectivity check with 1 second timeout
-$canConnectToGitHub = Test-ConnectionWithTimeout -hostname "github.com" -timeoutMs 1000
-
-# Import Modules and External Profiles
-# Ensure Terminal-Icons module is installed before importing
-if (-not (Get-Module -ListAvailable -Name Terminal-Icons)) {
-    Install-Module -Name Terminal-Icons -Scope CurrentUser -Force -SkipPublisherCheck
-}
-Import-Module -Name Terminal-Icons
-$ChocolateyProfile = "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
-if (Test-Path($ChocolateyProfile)) {
-    Import-Module "$ChocolateyProfile"
-}
-
-# Admin Check and Prompt Customization
-$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-function prompt {
-    if ($isAdmin) { "[" + (Get-Location) + "] # " } else { "[" + (Get-Location) + "] $ " }
-}
-$adminSuffix = if ($isAdmin) { " [ADMIN]" } else { "" }
-$Host.UI.RawUI.WindowTitle = "PowerShell {0}$adminSuffix" -f $PSVersionTable.PSVersion.ToString()
-
-# Utility Functions
 function Test-CommandExists {
     param($command)
     $exists = $null -ne (Get-Command $command -ErrorAction SilentlyContinue)
     return $exists
 }
 
-# Editor Configuration
-$EDITOR = if (Test-CommandExists nvim) { 'nvim' }
-          elseif (Test-CommandExists pvim) { 'pvim' }
-          elseif (Test-CommandExists vim) { 'vim' }
-          elseif (Test-CommandExists vi) { 'vi' }
-          elseif (Test-CommandExists code) { 'code' }
-          elseif (Test-CommandExists notepad++) { 'notepad++' }
-          elseif (Test-CommandExists sublime_text) { 'sublime_text' }
-          else { 'notepad' }
-Set-Alias -Name vim -Value $EDITOR
-
-function Edit-Profile {
-    vim $PROFILE.CurrentUserAllHosts
-}
 function touch($file) { "" | Out-File $file -Encoding ASCII }
+
+# Find file recursive
 function ff($name) {
     Get-ChildItem -recurse -filter "*${name}*" -ErrorAction SilentlyContinue | ForEach-Object {
         Write-Output "$($_.FullName)"
     }
 }
 
-# Network Utilities
 function Get-PubIP { (Invoke-WebRequest http://ifconfig.me/ip).Content }
 
 # Open WinUtil
@@ -94,18 +24,6 @@ function winutil {
 	iwr -useb https://christitus.com/win | iex
 }
 
-# System Utilities
-function admin {
-    if ($args.Count -gt 0) {
-        $argList = "& '$args'"
-        Start-Process wt -Verb runAs -ArgumentList "pwsh.exe -NoExit -Command $argList"
-    } else {
-        Start-Process wt -Verb runAs
-    }
-}
-
-# Set UNIX-like aliases for the admin command, so sudo <command> will run the command with elevated rights.
-Set-Alias -Name su -Value admin
 
 function uptime {
     if ($PSVersionTable.PSVersion.Major -eq 5) {
@@ -115,127 +33,28 @@ function uptime {
     }
 }
 
-function reload-profile {
-    & $profile
-}
 
 function unzip ($file) {
     Write-Output("Extracting", $file, "to", $pwd)
     $fullFile = Get-ChildItem -Path $pwd -Filter $file | ForEach-Object { $_.FullName }
     Expand-Archive -Path $fullFile -DestinationPath $pwd
 }
-function hb {
-    if ($args.Length -eq 0) {
-        Write-Error "No file path specified."
-        return
-    }
-    
-    $FilePath = $args[0]
-    
-    if (Test-Path $FilePath) {
-        $Content = Get-Content $FilePath -Raw
-    } else {
-        Write-Error "File path does not exist."
-        return
-    }
-    
-    $uri = "http://bin.christitus.com/documents"
-    try {
-        $response = Invoke-RestMethod -Uri $uri -Method Post -Body $Content -ErrorAction Stop
-        $hasteKey = $response.key
-        $url = "http://bin.christitus.com/$hasteKey"
-        Write-Output $url
-    } catch {
-        Write-Error "Failed to upload the document. Error: $_"
-    }
-}
-function grep($regex, $dir) {
-    if ( $dir ) {
-        Get-ChildItem $dir | select-string $regex
-        return
-    }
-    $input | select-string $regex
-}
 
-function df {
-    get-volume
-}
-
-function sed($file, $find, $replace) {
-    (Get-Content $file).replace("$find", $replace) | Set-Content $file
-}
-
-function which($name) {
-    Get-Command $name | Select-Object -ExpandProperty Definition
-}
-
-function export($name, $value) {
-    set-item -force -path "env:$name" -value $value;
-}
 
 function pkill($name) {
     Get-Process $name -ErrorAction SilentlyContinue | Stop-Process
 }
 
-function pgrep($name) {
-    Get-Process $name
-}
-
-function head {
-  param($Path, $n = 10)
-  Get-Content $Path -Head $n
-}
-
-function tail {
-  param($Path, $n = 10, [switch]$f = $false)
-  Get-Content $Path -Tail $n -Wait:$f
-}
-
-# Quick File Creation
 function nf { param($name) New-Item -ItemType "file" -Path . -Name $name }
 
-# Directory Management
-function mkcd { param($dir) mkdir $dir -Force; Set-Location $dir }
-
-### Quality of Life Aliases
-
-# Navigation Shortcuts
 function docs { Set-Location -Path $HOME\Documents }
+function downloads { Set-Location -Path $HOME\Downloads }
+function pp { Set-Location -Path $HOME\Projects }
+function root { Set-Location -Path $HOME }
 
-function dtop { Set-Location -Path $HOME\Desktop }
-
-# Quick Access to Editing the Profile
-function ep { vim $PROFILE }
-
-# Simplified Process Management
-function k9 { Stop-Process -Name $args[0] }
-
-# Enhanced Listing
-function la { Get-ChildItem -Path . -Force | Format-Table -AutoSize }
-function ll { Get-ChildItem -Path . -Force -Hidden | Format-Table -AutoSize }
-
-# Git Shortcuts
 function gs { git status }
 
 function ga { git add . }
-
-function gc { param($m) git commit -m "$m" }
-
-function gp { git push }
-
-# function g { __zoxide_z github }
-
-function gcl { git clone "$args" }
-
-function gcom {
-    git add .
-    git commit -m "$args"
-}
-function lazyg {
-    git add .
-    git commit -m "$args"
-    git push
-}
 
 # Quick Access to System Information
 function sysinfo { Get-ComputerInfo }
@@ -246,54 +65,21 @@ function flushdns {
 	Write-Host "DNS has been flushed"
 }
 
-# Clipboard Utilities
-function cpy { Set-Clipboard $args[0] }
 
-function pst { Get-Clipboard }
-
-
-$scriptblock = {
-    param($wordToComplete, $commandAst, $cursorPosition)
-    dotnet complete --position $cursorPosition $commandAst.ToString() |
-        ForEach-Object {
-            [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
-        }
-}
-Register-ArgumentCompleter -Native -CommandName dotnet -ScriptBlock $scriptblock
-
-
-# Get theme from profile.ps1 or use a default theme
-function Get-Theme {
-    if (Test-Path -Path $PROFILE.CurrentUserAllHosts -PathType leaf) {
-        $existingTheme = Select-String -Raw -Path $PROFILE.CurrentUserAllHosts -Pattern "oh-my-posh init pwsh --config"
-        if ($null -ne $existingTheme) {
-            Invoke-Expression $existingTheme
-            return
-        }
+function npp {
+    param (
+        [string]$file
+    )
+    if (Test-Path $file) {
+        Start-Process notepad++.exe -ArgumentList $file
     } else {
-        oh-my-posh init pwsh --config https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/huvix.omp.json | Invoke-Expression
+        Write-Host "File not found: $file"
     }
 }
 
-## Final Line to set prompt
-Get-Theme
-# if (Get-Command zoxide -ErrorAction SilentlyContinue) {
-#     Invoke-Expression (& { (zoxide init --cmd cd powershell | Out-String) })
-# } else {
-#     Write-Host "zoxide command not found. Attempting to install via winget..."
-#     try {
-#         winget install -e --id ajeetdsouza.zoxide
-#         Write-Host "zoxide installed successfully. Initializing..."
-#         Invoke-Expression (& { (zoxide init powershell | Out-String) })
-#     } catch {
-#         Write-Error "Failed to install zoxide. Error: $_"
-#     }
-# }
 
-Set-Alias -Name z -Value __zoxide_z -Option AllScope -Scope Global -Force
-Set-Alias -Name zi -Value __zoxide_zi -Option AllScope -Scope Global -Force
 
-# Help Function
+
 function Show-Help {
     @"
 PowerShell Profile Help
@@ -381,3 +167,15 @@ Use 'Show-Help' to display this help message.
 "@
 }
 Write-Host "Use 'Show-Help' to display help"
+
+
+
+# Import the Chocolatey Profile that contains the necessary code to enable
+# tab-completions to function for `choco`.
+# Be aware that if you are missing these lines from your profile, tab completion
+# for `choco` will not function.
+# See https://ch0.co/tab-completion for details.
+$ChocolateyProfile = "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
+if (Test-Path($ChocolateyProfile)) {
+  Import-Module "$ChocolateyProfile"
+}
